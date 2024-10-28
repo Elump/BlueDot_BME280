@@ -18,6 +18,7 @@
 
 #define BME280_CHIP_ID			0xD0
 #define BME280_CTRL_HUM			0xF2
+#define BME280_Status			0xF3
 #define BME280_CTRL_MEAS		0xF4		
 #define BME280_CONFIG			0xF5
 #define BME280_PRESSURE_MSB		0xF7
@@ -99,49 +100,58 @@ struct BME280_Coefficients
 	
 struct DeviceParameter
 {
-	uint8_t communication = 0;
 	int8_t SPI_cs;
 	int8_t SPI_sck;
 	int8_t SPI_mosi;
 	int8_t SPI_miso;
 	uint8_t I2CAddress;
 	uint8_t sensorMode;
+	uint8_t t_sb;
 	uint8_t IIRfilter;
+	uint8_t spi3;
 	uint8_t tempOversampling;
 	uint8_t pressOversampling;
 	uint8_t humidOversampling;
 	uint16_t pressureSeaLevel;
-	int16_t tempOutsideCelsius = 999;
-	int16_t tempOutsideFahrenheit = 999;
-	
+	int16_t tempOutsideCelsius;
+	int16_t tempOutsideFahrenheit;
 };
 
 
 class BlueDot_BME280 
 {
  public: 
-  
+  BlueDot_BME280();
+
   DeviceParameter parameter;
   BME280_Coefficients bme280_coefficients;
-  int32_t t_fine;
-  
-  
-  BlueDot_BME280();
+    
   uint8_t init(void);
   uint8_t checkID(void);
-  uint8_t readByte(byte reg);
-  uint8_t spiTransfer(uint8_t data);
-  void writeByte(byte reg, byte value);
-  void writeIIRFilter(void);
-  void readCoefficients(void);
-  void writeCTRLMeas(void);
+
   float readPressure(void);
   float readTempC(void);
   float readTempF(void);
   float readHumidity(void);
   float readAltitudeFeet(void);
   float readAltitudeMeter(void);
+  void  readMeasurement(float *valueP, float *valueT, float *valueH);
+
+private:
+  int32_t t_fine;		//int temperature needed for presure and huminity calculation
+
+  uint8_t readByte(byte reg);
+  uint8_t spiTransfer(uint8_t data);
+
+  float calcHumidity(int32_t raw_H);
+  float calcTempC(int32_t row_T);
+  float calcTempF(int32_t row_T);
+  float calcPressure(int32_t row_P);
   float convertTempKelvin(void);
 
+  void writeByte(byte reg, byte value);
+  void writeConfig(void);
+  void readCoefficients(void);
+  void writeCTRLMeas(void);
 };
 

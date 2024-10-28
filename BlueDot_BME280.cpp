@@ -242,21 +242,21 @@ float BlueDot_BME280::convertTempKelvin(void)
 		
 	float tempOutsideKelvin;	
 	
-	if (parameter.tempOutsideCelsius != 999 & parameter.tempOutsideFahrenheit == 999 )   
+	if (parameter.tempOutsideCelsius != 999 && parameter.tempOutsideFahrenheit == 999 )   
 	{
 		tempOutsideKelvin = parameter.tempOutsideCelsius;
 		tempOutsideKelvin = tempOutsideKelvin + 273.15;
 		return tempOutsideKelvin;		
 	}
 	
-	if (parameter.tempOutsideCelsius != 999 & parameter.tempOutsideFahrenheit != 999 )   
+	if (parameter.tempOutsideCelsius != 999 && parameter.tempOutsideFahrenheit != 999 )   
 	{
 		tempOutsideKelvin = parameter.tempOutsideCelsius;
 		tempOutsideKelvin = tempOutsideKelvin + 273.15;
 		return tempOutsideKelvin;		
 	}
 	
-	if (parameter.tempOutsideFahrenheit != 999 & parameter.tempOutsideCelsius == 999)
+	if (parameter.tempOutsideFahrenheit != 999 && parameter.tempOutsideCelsius == 999)
 	{
 		
 		tempOutsideKelvin = (parameter.tempOutsideFahrenheit - 32);
@@ -266,7 +266,7 @@ float BlueDot_BME280::convertTempKelvin(void)
 		return tempOutsideKelvin;	
 	}
 	
-	if (parameter.tempOutsideFahrenheit == 999 & parameter.tempOutsideCelsius == 999)
+	if (parameter.tempOutsideFahrenheit == 999 && parameter.tempOutsideCelsius == 999)
 	{
 		tempOutsideKelvin = 273.15 + 15;
 		return tempOutsideKelvin; 
