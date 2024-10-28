@@ -4,9 +4,17 @@
  #include "WProgram.h"
 #endif
 
-#include "Wire.h"
-#include "SPI.h"
+// remobe libs if not used
+//#define BME280_useI2C
+//#define BME280_useHWSPI
 
+#ifdef BME280_useI2C
+#include "Wire.h"
+#endif
+
+#ifdef BME280_useHWSPI
+#include "SPI.h"
+#endif
 
 #define BME280_CHIP_ID			0xD0
 #define BME280_CTRL_HUM			0xF2

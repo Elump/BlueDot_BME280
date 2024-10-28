@@ -3,8 +3,15 @@
 #endif
 
 #include "BlueDot_BME280.h"
-#include "Wire.h"
-#include "SPI.h"
+
+// delay used for SW SPI
+uint32_t SW_SPI_delay_us;
+
+// set frequecy for SW SPI (delay after each SCK change)
+void setSWSPI_freq_kHz (uint32_t freq) {
+	SW_SPI_delay_us = 500 / freq; 
+}
+
 
 BlueDot_BME280::BlueDot_BME280()
 {
@@ -55,15 +62,19 @@ uint8_t BlueDot_BME280::init(void)
 	{
 		digitalWrite(parameter.SPI_cs, HIGH);					//Chip Select Pin to HIGH
 		pinMode(parameter.SPI_cs, OUTPUT);						//Chip Select Pin as Output
+		#ifdef BME280_useHWSPI
 		SPI.begin();											//Initialize SPI library
 		SPI.setBitOrder(MSBFIRST);								//Most significant Bit first
 		SPI.setClockDivider(SPI_CLOCK_DIV4);					//Sets SPI clock to 1/4th of the system clock (i.e. 4000 kHz for Arduino Uno)
 		SPI.setDataMode(SPI_MODE0);								//Set Byte Transfer to (0,0) Mode
+		#endif
 	}
 	else														//Default I2C Communication 
 	{
+		#ifdef BME280_useI2C
 		Wire.begin();											//Default value for Arduino Boards
 		//Wire.begin(0,2);										//Use this for NodeMCU board; SDA = GPIO0 = D3; SCL = GPIO2 = D4
+		#endif
 	}
 
 
@@ -396,17 +407,21 @@ void BlueDot_BME280::writeByte(byte reg, byte value)
 	if (parameter.communication == 2)					//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
+		#ifdef BME280_useHWSPI
 		SPI.transfer(reg & 0x7F);
 		SPI.transfer(value);
+		#endif
 		digitalWrite(parameter.SPI_cs, HIGH);
 	}
 	
 	else												//I2C (default)
 	{
+		#ifdef BME280_useI2C
 		Wire.beginTransmission(parameter.I2CAddress);
 		Wire.write(reg);
 		Wire.write(value);
 		Wire.endTransmission();
+		#endif
 	}
 }
 //##########################################################################
@@ -425,19 +440,23 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 	if (parameter.communication == 2)					//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
+		#ifdef BME280_useHWSPI
 		SPI.transfer(reg | 0x80);		
 		value = SPI.transfer(0);
+		#endif
 		digitalWrite(parameter.SPI_cs, HIGH);		
 		return value;
 	}
 	
 	else												//I2C (default)
 	{
+		#ifdef BME280_useI2C
 		Wire.beginTransmission(parameter.I2CAddress);
 		Wire.write(reg);
 		Wire.endTransmission();
 		Wire.requestFrom(parameter.I2CAddress,1);		
 		value = Wire.read();		
+		#endif	
 		return value;
 	}
 }
