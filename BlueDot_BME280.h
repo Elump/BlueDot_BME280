@@ -1,5 +1,3 @@
-
-
 #if (ARDUINO >= 100)
  #include "Arduino.h"
 #else
@@ -87,7 +85,6 @@ struct BME280_Coefficients
       int16_t  dig_H4;
       int16_t  dig_H5;
       int8_t   dig_H6;
-	  
 };
 	
 	

@@ -1,8 +1,3 @@
-
-
-
-
-
 #if defined(_AVR_)
 #include <util/delay.h>
 #endif
@@ -13,16 +8,22 @@
 
 BlueDot_BME280::BlueDot_BME280()
 {
-	parameter.communication;
-	parameter.I2CAddress;
-	parameter.sensorMode;
-	parameter.IIRfilter;
-	parameter.tempOversampling;
-	parameter.pressOversampling;
-	parameter.humidOversampling;
-	parameter.pressureSeaLevel = 0;
-	parameter.tempOutsideCelsius = 999;
-	parameter.tempOutsideFahrenheit = 999;
+	parameter.communication = 0;			// 0=I2C, 1=software SPI or 2=Hardware SPI
+	parameter.I2CAddress = 0x77;
+	parameter.sensorMode = 0b11;  			// 0=sleep mode, 1=forced mode, 2=normal mode
+	// differances BME280 vs. BMP280
+	// t_sb		BMP280	BME280
+	// 0b110	2s		10ms
+	// 0b111	4s		20ms
+	parameter.t_sb = 0b101;       			// 0b011 = 250 msec, 0b101 = 1s sampling delay
+	parameter.IIRfilter = 0b010;  			// IIR Filter level, 0=filter off, 2=filter 4, 3=filter 8
+	parameter.spi3 = 0b0;  					// no 3-wire SPI 
+	parameter.tempOversampling = 0b001;		// ovesampling factor, 1=single sampling
+	parameter.pressOversampling = 0b001;	// ovesampling factor, 1=single sampling
+	parameter.humidOversampling = 0b001;	// ovesampling factor, 1=single sampling
+	parameter.pressureSeaLevel = 1013.25;   // default value of 1013.25 hPa
+	parameter.tempOutsideCelsius = 15;      // default value of 15°C
+	parameter.tempOutsideFahrenheit = 59;   // default value of 59°F
 
 }
 
@@ -78,15 +79,17 @@ uint8_t BlueDot_BME280::init(void)
 	
 	
 	
-	//3. Set up IIR Filter
-	//####################
+	//3. Set up IIR Filter, normal mode sampling rate (t_sb) and 3-wire spi (3spi)
+	//############################################################################
 	//The BME280 features an internal IIR (Infinite Impulse Response) Filter
 	//The IIR Filter suppresses high frequency fluctuations (i. e. pressure changes due to slamming doors)
 	//It improves the pressure and temperature resolution to 20 bits
 	//The resolution of the humidity measurement is fixed at 16 bits and is not affected by the filter
 	//When enabled, we can set up the filter coefficient (2, 4, 8 or 16)
 	//This coefficient defines the filter's time constant (please refer to Datasheet)
-	writeIIRFilter();	
+	//Parameter t_sb sets the internal sampling rate, independant of the rate you actually poll values.
+	// Parameter spi3 turns on 3-wire SPI mode.
+	writeConfig();		
 	
 	
 	
@@ -144,15 +147,23 @@ void BlueDot_BME280::readCoefficients(void)
 	bme280_coefficients.dig_H6 = ((uint8_t)(readByte(BME280_DIG_H6)));
 }
 //##########################################################################
-void BlueDot_BME280::writeIIRFilter(void)
+void BlueDot_BME280::writeConfig(void)
 {
+	//The irritatingly vague name (writeConfig) is derived from the data sheet
+	//The manufacturers simply refer to byte 0xF5 as "config" so I use it for consistency.
+	//It is not really a very good function name.
+	//
 	//We set up the IIR Filter through bits 4, 3 and 2 from Config Register (0xF5)]
-	//The other bits from this register won't be used in this program and remain 0
-	//Please refer to the BME280 Datasheet for more information
+	//t_sb is set in bits 5,6,7 and controls sampling rate
+    //spi3 is set in bit 0 and turns on/off the 3pin SPI mode
+    //bit 1 is actually never used
+    //Please refer to the BME280 Datasheet for more information
 	
 	byte value;
-	value = (parameter.IIRfilter << 2) & 0b00011100;
-	writeByte(BME280_CONFIG, value);
+	value  = (parameter.t_sb << 5) & 0b11100000;
+    value |= (parameter.IIRfilter << 2) & 0b00011100;
+    value |= parameter.spi3 & 0b00000001;
+    writeByte(BME280_CONFIG, value);
 }
 //##########################################################################
 void BlueDot_BME280::writeCTRLMeas(void)
@@ -252,8 +263,8 @@ float BlueDot_BME280::convertTempKelvin(void)
 	
 	tempOutsideKelvin = 273.15 + 15;
 	return tempOutsideKelvin;
-
 }
+
 //##########################################################################
 float BlueDot_BME280::readAltitudeFeet(void)
 {	
@@ -268,7 +279,6 @@ float BlueDot_BME280::readAltitudeFeet(void)
 	heightOutput = heightOutput / 0.0065;
 	heightOutput = heightOutput / 0.3048;
 	return heightOutput;
-	
 }
 
 //##########################################################################
@@ -318,7 +328,6 @@ float BlueDot_BME280::readHumidity(void)
 //##########################################################################
 float BlueDot_BME280::readTempC(void)
 {
-	
 	if (parameter.tempOversampling == 0b000)					//disabling the temperature measurement function
 	{
 		return 0;
@@ -447,6 +456,4 @@ uint8_t BlueDot_BME280::spiTransfer(uint8_t data)				//Software SPI done through
 			reply |= 1;
 	}
 	return reply;
-
 }
-
