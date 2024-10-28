@@ -56,7 +56,8 @@ uint8_t BlueDot_BME280::init(void)
 		digitalWrite(parameter.SPI_cs, HIGH);					//Chip Select Pin to HIGH
 		pinMode(parameter.SPI_sck, OUTPUT);						//Clock as Output
 		pinMode(parameter.SPI_mosi, OUTPUT);					//MOSI as Output
-		pinMode(parameter.SPI_miso, INPUT);						//MISO as Input		
+		if (!parameter.spi3)
+			pinMode(parameter.SPI_miso, INPUT);					//MISO as Input		
 	}
 	if (parameter.communication == 2)							//Hardware SPI Communication
 	{
@@ -469,12 +470,17 @@ uint8_t BlueDot_BME280::spiTransfer(uint8_t data)				//Software SPI done through
 	{
 		reply <<= 1;
 		digitalWrite(parameter.SPI_sck, LOW);
-		digitalWrite(parameter.SPI_mosi, data & (1<<counter));
+		if (data || !parameter.spi3)
+			digitalWrite(parameter.SPI_mosi, data & (1<<counter));
+		else
+			pinMode(parameter.SPI_miso, INPUT);			//set to MISO
 		delayMicroseconds(SW_SPI_delay_us);
 		digitalWrite(parameter.SPI_sck, HIGH);
 		if (digitalRead(parameter.SPI_miso))
 			reply |= 1;
 		delayMicroseconds(SW_SPI_delay_us);
 	}
+	if (parameter.spi3)									//set to MOSI
+		pinMode(parameter.SPI_mosi, OUTPUT);
 	return reply;
 }
