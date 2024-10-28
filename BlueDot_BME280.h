@@ -100,6 +100,7 @@ struct BME280_Coefficients
 	
 struct DeviceParameter
 {
+	uint8_t communication;
 	int8_t SPI_cs;
 	int8_t SPI_sck;
 	int8_t SPI_mosi;

@@ -59,7 +59,7 @@ uint8_t BlueDot_BME280::init(void)
 		if (!parameter.spi3)
 			pinMode(parameter.SPI_miso, INPUT);					//MISO as Input		
 	}
-	if (parameter.communication == 2)							//Hardware SPI Communication
+	else if (parameter.communication == 2)						//Hardware SPI Communication
 	{
 		pinMode(parameter.SPI_cs, OUTPUT);						//Chip Select Pin as Output
 		digitalWrite(parameter.SPI_cs, HIGH);					//Chip Select Pin to HIGH
@@ -192,6 +192,29 @@ void BlueDot_BME280::writeCTRLMeas(void)
 //##########################################################################
 //DATA READOUT FUNCTIONS
 //##########################################################################
+float BlueDot_BME280::calcPressure(int32_t row_P) {
+	int64_t var1, var2, P;
+	var1 = ((int64_t)t_fine) - 128000;
+	var2 = var1 * var1 * (int64_t)bme280_coefficients.dig_P6;
+	var2 = var2 + ((var1 * (int64_t)bme280_coefficients.dig_P5)<<17);
+	var2 = var2 + (((int64_t)bme280_coefficients.dig_P4)<<35);
+	var1 = ((var1 * var1 * (int64_t)bme280_coefficients.dig_P3)>>8) + ((var1 * (int64_t)bme280_coefficients.dig_P2)<<12);
+	var1 = (((((int64_t)1)<<47)+var1))*((int64_t)bme280_coefficients.dig_P1)>>33;
+	if (var1 == 0)
+	{
+		return 0; // avoid exception caused by division by zero
+	}
+	P = 1048576 - row_P;
+	P = (((P << 31) - var2)*3125)/var1;
+	var1 = (((int64_t)bme280_coefficients.dig_P9) * (P >> 13) * (P >> 13)) >> 25;
+	var2 = (((int64_t)bme280_coefficients.dig_P8) * P) >> 19;
+	P = ((P + var1 + var2) >> 8) + (((int64_t)bme280_coefficients.dig_P7)<<4);
+	
+	P = P >> 8; // /256
+	return (float)P/100;
+}
+
+//##########################################################################
 float BlueDot_BME280::readPressure(void)
 {
 	if (parameter.pressOversampling == 0b000)						//disabling the pressure measurement function
@@ -208,26 +231,7 @@ float BlueDot_BME280::readPressure(void)
 		adc_P |= (uint32_t)readByte(BME280_PRESSURE_LSB) << 4;
 		adc_P |= (readByte(BME280_PRESSURE_XLSB) >> 4 )& 0b00001111;
 		
-		int64_t var1, var2, P;
-		var1 = ((int64_t)t_fine) - 128000;
-		var2 = var1 * var1 * (int64_t)bme280_coefficients.dig_P6;
-		var2 = var2 + ((var1 * (int64_t)bme280_coefficients.dig_P5)<<17);
-		var2 = var2 + (((int64_t)bme280_coefficients.dig_P4)<<35);
-		var1 = ((var1 * var1 * (int64_t)bme280_coefficients.dig_P3)>>8) + ((var1 * (int64_t)bme280_coefficients.dig_P2)<<12);
-		var1 = (((((int64_t)1)<<47)+var1))*((int64_t)bme280_coefficients.dig_P1)>>33;
-		if (var1 == 0)
-		{
-			return 0; // avoid exception caused by division by zero
-		}
-		P = 1048576 - adc_P;
-		P = (((P << 31) - var2)*3125)/var1;
-		var1 = (((int64_t)bme280_coefficients.dig_P9) * (P >> 13) * (P >> 13)) >> 25;
-		var2 = (((int64_t)bme280_coefficients.dig_P8) * P) >> 19;
-		P = ((P + var1 + var2) >> 8) + (((int64_t)bme280_coefficients.dig_P7)<<4);
-		
-		P = P >> 8; // /256
-		return (float)P/100;
-		
+		return calcPressure(adc_P);
 	}
 }
 
@@ -306,7 +310,21 @@ float BlueDot_BME280::readAltitudeMeter(void)
 	heightOutput = heightOutput * tempOutsideKelvin;
 	heightOutput = heightOutput / 0.0065;
 	return heightOutput;	
-	
+}
+
+//##########################################################################
+float BlueDot_BME280::calcHumidity(int32_t raw_H) {
+	int32_t var1;
+	var1 = (t_fine - ((int32_t)76800));
+	var1 = (((((raw_H << 14) - (((int32_t)bme280_coefficients.dig_H4) << 20) - (((int32_t)bme280_coefficients.dig_H5) * var1)) +
+	((int32_t)16384)) >> 15) * (((((((var1 * ((int32_t)bme280_coefficients.dig_H6)) >> 10) * (((var1 * ((int32_t)bme280_coefficients.dig_H3)) >> 11) + ((int32_t)32768))) >> 10) + ((int32_t)2097152)) *
+	((int32_t)bme280_coefficients.dig_H2) + 8192) >> 14));
+	var1 = (var1 - (((((var1 >> 15) * (var1 >> 15)) >> 7) * ((int32_t)bme280_coefficients.dig_H1)) >> 4));
+	var1 = (var1 < 0 ? 0 : var1);
+	var1 = (var1 > 419430400 ? 419430400 : var1);
+	float H = (var1>>12);
+	H = H /1024.0;
+	return H;
 }
 
 //##########################################################################
@@ -323,18 +341,21 @@ float BlueDot_BME280::readHumidity(void)
 		adc_H = (uint32_t)readByte(BME280_HUMIDITY_MSB) << 8;
 		adc_H |= (uint32_t)readByte(BME280_HUMIDITY_LSB);
 		
-		int32_t var1;
-		var1 = (t_fine - ((int32_t)76800));
-		var1 = (((((adc_H << 14) - (((int32_t)bme280_coefficients.dig_H4) << 20) - (((int32_t)bme280_coefficients.dig_H5) * var1)) +
-		((int32_t)16384)) >> 15) * (((((((var1 * ((int32_t)bme280_coefficients.dig_H6)) >> 10) * (((var1 * ((int32_t)bme280_coefficients.dig_H3)) >> 11) + ((int32_t)32768))) >> 10) + ((int32_t)2097152)) *
-		((int32_t)bme280_coefficients.dig_H2) + 8192) >> 14));
-		var1 = (var1 - (((((var1 >> 15) * (var1 >> 15)) >> 7) * ((int32_t)bme280_coefficients.dig_H1)) >> 4));
-		var1 = (var1 < 0 ? 0 : var1);
-		var1 = (var1 > 419430400 ? 419430400 : var1);
-		float H = (var1>>12);
-		H = H /1024.0;
-		return H;
+		return calcHumidity(adc_H);
 	}
+}
+
+//##########################################################################
+float BlueDot_BME280::calcTempC(int32_t row_T) {
+	int64_t var1, var2;
+	
+	var1 = ((((row_T>>3) - ((int32_t)bme280_coefficients.dig_T1<<1))) * ((int32_t)bme280_coefficients.dig_T2)) >> 11;
+	var2 = (((((row_T>>4) - ((int32_t)bme280_coefficients.dig_T1)) * ((row_T>>4) - ((int32_t)bme280_coefficients.dig_T1))) >> 12) *
+	((int32_t)bme280_coefficients.dig_T3)) >> 14;
+	t_fine = var1 + var2;
+	float T = (t_fine * 5 + 128) >> 8;
+	T = T / 100;
+	return T;
 }
 
 //##########################################################################
@@ -352,16 +373,22 @@ float BlueDot_BME280::readTempC(void)
 		adc_T |= (uint32_t)readByte(BME280_TEMPERATURE_LSB) << 4;
 		adc_T |= (readByte(BME280_TEMPERATURE_XLSB) >> 4 )& 0b00001111;
 		
-		int64_t var1, var2;
-		
-		var1 = ((((adc_T>>3) - ((int32_t)bme280_coefficients.dig_T1<<1))) * ((int32_t)bme280_coefficients.dig_T2)) >> 11;
-		var2 = (((((adc_T>>4) - ((int32_t)bme280_coefficients.dig_T1)) * ((adc_T>>4) - ((int32_t)bme280_coefficients.dig_T1))) >> 12) *
-		((int32_t)bme280_coefficients.dig_T3)) >> 14;
-		t_fine = var1 + var2;
-		float T = (t_fine * 5 + 128) >> 8;
-		T = T / 100;
-		return T;
+		return calcTempC(adc_T);
 	}
+}
+
+//##########################################################################
+float BlueDot_BME280::calcTempF(int32_t row_T) {
+	int64_t var1, var2;
+	
+	var1 = ((((row_T>>3) - ((int32_t)bme280_coefficients.dig_T1<<1))) * ((int32_t)bme280_coefficients.dig_T2)) >> 11;
+	var2 = (((((row_T>>4) - ((int32_t)bme280_coefficients.dig_T1)) * ((row_T>>4) - ((int32_t)bme280_coefficients.dig_T1))) >> 12) *
+	((int32_t)bme280_coefficients.dig_T3)) >> 14;
+	t_fine = var1 + var2;
+	float T = (t_fine * 5 + 128) >> 8;
+	T = T / 100;
+	T = (T * 1.8) + 32;
+	return T;
 }
 
 //##########################################################################
@@ -379,16 +406,7 @@ float BlueDot_BME280::readTempF(void)
 		adc_T |= (uint32_t)readByte(BME280_TEMPERATURE_LSB) << 4;
 		adc_T |= (readByte(BME280_TEMPERATURE_XLSB) >> 4 )& 0b00001111;
 		
-		int64_t var1, var2;
-		
-		var1 = ((((adc_T>>3) - ((int32_t)bme280_coefficients.dig_T1<<1))) * ((int32_t)bme280_coefficients.dig_T2)) >> 11;
-		var2 = (((((adc_T>>4) - ((int32_t)bme280_coefficients.dig_T1)) * ((adc_T>>4) - ((int32_t)bme280_coefficients.dig_T1))) >> 12) *
-		((int32_t)bme280_coefficients.dig_T3)) >> 14;
-		t_fine = var1 + var2;
-		float T = (t_fine * 5 + 128) >> 8;
-		T = T / 100;
-		T = (T * 1.8) + 32;
-		return T;
+		return calcTempF(adc_T);
 	}
 }
 
@@ -463,7 +481,77 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 }
 
 //##########################################################################
-uint8_t BlueDot_BME280::spiTransfer(uint8_t data)				//Software SPI done through bit-banging
+void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH)		//burst read of sensor data
+{
+	int32_t row_P, row_T, row_H;
+	if (parameter.communication == 1)					//Software SPI
+	{
+		digitalWrite(parameter.SPI_cs, LOW);
+		spiTransfer(BME280_PRESSURE_MSB | 0x80);		
+
+		row_P = (uint32_t)spiTransfer(0)  << 12;
+		row_P |= (uint32_t)spiTransfer(0)  << 4;
+		row_P |= (spiTransfer(0)  >> 4 )& 0b00001111;
+		row_T = (uint32_t)spiTransfer(0) << 12;
+		row_T |= (uint32_t)spiTransfer(0) << 4;
+		row_T |= (spiTransfer(0) >> 4 )& 0b00001111;
+		row_H = (uint32_t)spiTransfer(0) << 8;
+		row_H |= (uint32_t)spiTransfer(0);
+		digitalWrite(parameter.SPI_cs, HIGH);	
+	}
+	
+	else if (parameter.communication == 2)				//Hardware SPI
+	{
+		digitalWrite(parameter.SPI_cs, LOW);
+		#ifdef BME280_useHWSPI
+		SPI.transfer(BME280_PRESSURE_MSB | 0x80);		
+		
+		row_P = (uint32_t)SPI.transfer(0)  << 12;
+		row_P |= (uint32_t)SPI.transfer(0)  << 4;
+		row_P |= (SPI.transfer(0)  >> 4 )& 0b00001111;
+		row_T = (uint32_t)SPI.transfer(0) << 12;
+		row_T |= (uint32_t)SPI.transfer(0) << 4;
+		row_T |= (SPI.transfer(0) >> 4 )& 0b00001111;
+		row_H = (uint32_t)SPI.transfer(0) << 8;
+		row_H |= (uint32_t)SPI.transfer(0);
+		#endif
+		digitalWrite(parameter.SPI_cs, HIGH);		
+	}
+	
+	else												//I2C (default)
+	{
+		#ifdef BME280_useI2C
+		Wire.beginTransmission(parameter.I2CAddress);
+		Wire.write(reg);
+		Wire.endTransmission();
+		Wire.requestFrom(parameter.I2CAddress,(uint8_t)1);		
+
+		row_P = (uint32_t)Wire.read()  << 12;
+		row_P |= (uint32_t)Wire.read()  << 4;
+		row_P |= (Wire.read()  >> 4 )& 0b00001111;
+		row_T = (uint32_t)Wire.read() << 12;
+		row_T |= (uint32_t)Wire.read() << 4;
+		row_T |= (Wire.read() >> 4 )& 0b00001111;
+		row_H = (uint32_t)Wire.read() << 8;
+		row_H |= (uint32_t)Wire.read();
+		#endif	
+	}
+	//calc temp first since it is needed for presure and huminity
+	// null-pointer check 
+	if (valueT != NULL){
+		*valueT = calcTempC(row_T);
+	}
+	if (valueP != NULL){
+		*valueP = calcPressure(row_P);
+	}
+	if (valueH != NULL){
+		*valueH = calcHumidity(row_H);
+	}
+	return;
+}
+
+//##########################################################################
+uint8_t BlueDot_BME280::spiTransfer(uint8_t data)		//Software SPI done through bit-banging
 {
 	uint8_t reply = 0;
 	for (int counter = 7; counter >= 0; counter--)
