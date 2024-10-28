@@ -29,7 +29,8 @@
 #define BME280_HUMIDITY_MSB		0xFD
 #define BME280_HUMIDITY_LSB		0xFE
 
- 
+// set frequecy for SW SPI 
+extern void setSWSPI_freq_kHz(uint32_t);
 
 
 enum Coefficients
