@@ -423,7 +423,7 @@ void BlueDot_BME280::writeByte(byte reg, byte value)
 		digitalWrite(parameter.SPI_cs, HIGH);	
 	}
 	
-	if (parameter.communication == 2)					//Hardware SPI
+	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
 		#ifdef BME280_useHWSPI
@@ -456,7 +456,7 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 		return value;
 	}
 	
-	if (parameter.communication == 2)					//Hardware SPI
+	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
 		#ifdef BME280_useHWSPI
@@ -473,8 +473,8 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 		Wire.beginTransmission(parameter.I2CAddress);
 		Wire.write(reg);
 		Wire.endTransmission();
-		Wire.requestFrom(parameter.I2CAddress,1);		
-		value = Wire.read();		
+		Wire.requestFrom(parameter.I2CAddress,(uint8_t)1);		
+		value = Wire.read();
 		#endif	
 		return value;
 	}
