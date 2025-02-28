@@ -59,6 +59,7 @@ uint8_t BlueDot_BME280::init(void)
 		if (!parameter.spi3)
 			pinMode(parameter.SPI_miso, INPUT);					//MISO as Input		
 	}
+	#ifdef BME280_useHWSPI
 	else if (parameter.communication == 2)						//Hardware SPI Communication
 	{
 		pinMode(parameter.SPI_cs, OUTPUT);						//Chip Select Pin as Output
@@ -70,6 +71,8 @@ uint8_t BlueDot_BME280::init(void)
 		SPI.setDataMode(SPI_MODE0);								//Set Byte Transfer to (0,0) Mode
 		#endif
 	}
+	#endif
+	#ifdef BME280_useI2C
 	else														//Default I2C Communication 
 	{
 		#ifdef BME280_useI2C
@@ -77,7 +80,7 @@ uint8_t BlueDot_BME280::init(void)
 		//Wire.begin(0,2);										//Use this for NodeMCU board; SDA = GPIO0 = D3; SCL = GPIO2 = D4
 		#endif
 	}
-
+	#endif
 
  
 		
@@ -422,7 +425,7 @@ void BlueDot_BME280::writeByte(byte reg, byte value)
 		spiTransfer(value);
 		digitalWrite(parameter.SPI_cs, HIGH);	
 	}
-	
+	#ifdef BME280_useHWSPI
 	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
@@ -432,7 +435,8 @@ void BlueDot_BME280::writeByte(byte reg, byte value)
 		#endif
 		digitalWrite(parameter.SPI_cs, HIGH);
 	}
-	
+	#endif
+	#ifdef BME280_useI2C
 	else												//I2C (default)
 	{
 		#ifdef BME280_useI2C
@@ -442,6 +446,7 @@ void BlueDot_BME280::writeByte(byte reg, byte value)
 		Wire.endTransmission();
 		#endif
 	}
+	#endif
 }
 //##########################################################################
 uint8_t BlueDot_BME280::readByte(byte reg)
@@ -455,7 +460,7 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 		digitalWrite(parameter.SPI_cs, HIGH);		
 		return value;
 	}
-	
+	#ifdef BME280_useHWSPI
 	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
@@ -466,7 +471,8 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 		digitalWrite(parameter.SPI_cs, HIGH);		
 		return value;
 	}
-	
+	#endif
+	#ifdef BME280_useI2C
 	else												//I2C (default)
 	{
 		#ifdef BME280_useI2C
@@ -478,6 +484,7 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 		#endif	
 		return value;
 	}
+	#endif
 }
 
 //##########################################################################
@@ -499,7 +506,7 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 		row_H |= (uint32_t)spiTransfer(0);
 		digitalWrite(parameter.SPI_cs, HIGH);	
 	}
-	
+	#ifdef BME280_useHWSPI
 	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
@@ -517,14 +524,15 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 		#endif
 		digitalWrite(parameter.SPI_cs, HIGH);		
 	}
-	
+	#endif
+	#ifdef BME280_useI2C
 	else												//I2C (default)
 	{
 		#ifdef BME280_useI2C
 		Wire.beginTransmission(parameter.I2CAddress);
-		Wire.write(reg);
+		Wire.write(BME280_PRESSURE_MSB);
 		Wire.endTransmission();
-		Wire.requestFrom(parameter.I2CAddress,(uint8_t)1);		
+		Wire.requestFrom(parameter.I2CAddress,(uint8_t)8);		
 
 		row_P = (uint32_t)Wire.read()  << 12;
 		row_P |= (uint32_t)Wire.read()  << 4;
@@ -536,6 +544,8 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 		row_H |= (uint32_t)Wire.read();
 		#endif	
 	}
+	#endif
+
 	//calc temp first since it is needed for presure and huminity
 	// null-pointer check 
 	if (valueT != NULL){
