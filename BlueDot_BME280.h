@@ -1,3 +1,8 @@
+#ifndef BLUEDOT_BME280_H
+#define BLUEDOT_BME280_H
+
+#define BLUEDOT_BME280_VERSION "1.10.0"
+
 #if (ARDUINO >= 100)
  #include "Arduino.h"
 #else
@@ -7,13 +12,19 @@
 // remobe libs if not used
 //#define BME280_useI2C
 //#define BME280_useHWSPI
+#define BME280_useSWI2C
 
 #ifdef BME280_useI2C
-#include "Wire.h"
+#include <Wire.h>
 #endif
 
 #ifdef BME280_useHWSPI
-#include "SPI.h"
+#include <SPI.h>
+#endif
+
+#ifdef BME280_useSWI2C
+//#include "SoftWire.h"
+#include "Swire.h"
 #endif
 
 #define BME280_CHIP_ID			0xD0
@@ -31,8 +42,7 @@
 #define BME280_HUMIDITY_LSB		0xFE
 
 // set frequecy for SW SPI 
-extern void setSWSPI_freq_kHz(uint32_t);
-
+void setSWCom_freq_kHz(uint8_t);
 
 enum Coefficients
 {
@@ -100,22 +110,22 @@ struct BME280_Coefficients
 	
 struct DeviceParameter
 {
-	uint8_t communication;
+	uint8_t communication;				// 0=I2C, 1=software SPI, 2=Hardware SPI, 3=softwareI2C
 	int8_t SPI_cs;
-	int8_t SPI_sck;
-	int8_t SPI_mosi;
+	int8_t SPI_sck;						// SPI_sck also used for SW I2C sck
+	int8_t SPI_mosi;					// SPI_mosi also used for SW I2C sda
 	int8_t SPI_miso;
 	uint8_t I2CAddress;
-	uint8_t sensorMode;
-	uint8_t t_sb;
-	uint8_t IIRfilter;
-	uint8_t spi3;
-	uint8_t tempOversampling;
-	uint8_t pressOversampling;
-	uint8_t humidOversampling;
-	uint16_t pressureSeaLevel;
-	int16_t tempOutsideCelsius;
-	int16_t tempOutsideFahrenheit;
+	uint8_t sensorMode;					// 0=sleep mode, 1=2=forced mode, 3=normal mode
+	uint8_t t_sb;						// inactive duration in normal mode
+	uint8_t IIRfilter;					// IIR Filter level,
+	uint8_t spi3;						// nse 3-wire SPI
+	uint8_t tempOversampling;			// ovesampling factor
+	uint8_t pressOversampling;			// ovesampling factor
+	uint8_t humidOversampling;			// ovesampling factor
+	uint16_t pressureSeaLevel;			// default value
+	int16_t tempOutsideCelsius;			// default value
+	int16_t tempOutsideFahrenheit;		// default value
 };
 
 
@@ -156,3 +166,4 @@ private:
   void writeCTRLMeas(void);
 };
 
+#endif // BLUEDOT_BME280_H

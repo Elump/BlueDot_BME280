@@ -5,25 +5,40 @@
 #include "BlueDot_BME280.h"
 
 // delay used for SW SPI
-uint32_t SW_SPI_delay_us;
+uint32_t SW_Communication_delay_us;
 
-// set frequecy for SW SPI (delay after each SCK change)
-void setSWSPI_freq_kHz (uint32_t freq) {
-	SW_SPI_delay_us = 500 / freq; 
+// set frequecy for SW SPI (delay after each SCK change) ans SW I2C
+void setSWCom_freq_kHz (uint8_t kfreq) {
+	if (kfreq > 0) {
+		SW_Communication_delay_us = 500 / kfreq; // 2 SCK change per bit
+	}
+	else {
+		SW_Communication_delay_us = 500; // set to 1kHz
+	}
 }
 
+#ifdef BME280_useSWI2C
+//SoftWire swI2C(0, 0);     // SDA, SCL need to be set at initalisation
+#endif
 
+// BlueDot_BME280 constructor
 BlueDot_BME280::BlueDot_BME280()
 {
-	parameter.communication = 0;			// 0=I2C, 1=software SPI or 2=Hardware SPI
-	parameter.I2CAddress = 0x77;
-	parameter.sensorMode = 0b11;  			// 0=sleep mode, 1=forced mode, 2=normal mode
+	parameter.communication = 0;			// 0=I2C, 1=software SPI, 2=Hardware SPI, 3=softwareI2C
+	parameter.I2CAddress = 0x77;			// default I2C Address 0x76 (SDO to Gnd) or 0x77 (SDO to VCC)
+	parameter.sensorMode = 0b11;  			// 0=sleep mode, 1=2=forced mode, 3=normal mode
 	// differances BME280 vs. BMP280
-	// t_sb		BMP280	BME280
+	// t_sb		BMP280	BME280	
+	// 0b000	0.5ms	0.5ms
+	// 0b001	62.5ms	62.5ms
+	// 0b010	125ms	125ms
+	// 0b011	250ms	250ms
+	// 0b100	500ms	500ms
+	// 0b101	1000ms	1000ms
 	// 0b110	2s		10ms
 	// 0b111	4s		20ms
-	parameter.t_sb = 0b101;       			// 0b011 = 250 msec, 0b101 = 1s sampling delay
-	parameter.IIRfilter = 0b010;  			// IIR Filter level, 0=filter off, 2=filter 4, 3=filter 8
+	parameter.t_sb = 0b101;       			// inactive duration in normal mode
+	parameter.IIRfilter = 0b100;  			// IIR Filter level, 0=filter off, 2=filter 4 (5 samples for >75%), 3=filter 8 (11 samples for >75%), 4=filter 16 (22 samples for >75%)
 	parameter.spi3 = 0b0;  					// no 3-wire SPI 
 	parameter.tempOversampling = 0b001;		// ovesampling factor, 1=single sampling
 	parameter.pressOversampling = 0b001;	// ovesampling factor, 1=single sampling
@@ -64,23 +79,41 @@ uint8_t BlueDot_BME280::init(void)
 	{
 		pinMode(parameter.SPI_cs, OUTPUT);						//Chip Select Pin as Output
 		digitalWrite(parameter.SPI_cs, HIGH);					//Chip Select Pin to HIGH
-		#ifdef BME280_useHWSPI
 		SPI.begin();											//Initialize SPI library
 		SPI.setBitOrder(MSBFIRST);								//Most significant Bit first
 		SPI.setClockDivider(SPI_CLOCK_DIV4);					//Sets SPI clock to 1/4th of the system clock (i.e. 4000 kHz for Arduino Uno)
 		SPI.setDataMode(SPI_MODE0);								//Set Byte Transfer to (0,0) Mode
-		#endif
 	}
 	#endif
 	#ifdef BME280_useI2C
-	else														//Default I2C Communication 
+	else if (parameter.communication == 0)						//Default I2C Communication 
 	{
-		#ifdef BME280_useI2C
 		Wire.begin();											//Default value for Arduino Boards
 		//Wire.begin(0,2);										//Use this for NodeMCU board; SDA = GPIO0 = D3; SCL = GPIO2 = D4
-		#endif
 	}
 	#endif
+	#ifdef BME280_useSWI2C
+	else if (parameter.communication == 3)						//Software I2C Communication
+	{
+		//swI2C.setSda(xyz);									//set SDA pin in each read or write function
+		//swI2C.setScl(xyz);									//set SCL pin in each read or write function
+		/*	
+		//SoftWire implementation
+		char swTxBuffer[ 8];									//These buffers must be at least as large as the largest read or write you perform.
+		char swRxBuffer[10];
+		swI2C.setTxBuffer(swTxBuffer, sizeof(swTxBuffer));
+		swI2C.setRxBuffer(swRxBuffer, sizeof(swRxBuffer));
+		swI2C.setDelay_us(SW_Communication_delay_us);			//communication delay 5us = 100 kHz
+		swI2C.setTimeout_ms(500);								//communication timeout in ms
+		*/
+		//SWire implementation
+		SWire.delay_time_us = SW_Communication_delay_us;
+	}
+	#endif
+	else
+	{
+		return 0;												//Communication Protocol not set
+	}
 
  
 		
@@ -429,24 +462,45 @@ void BlueDot_BME280::writeByte(byte reg, byte value)
 	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
-		#ifdef BME280_useHWSPI
 		SPI.transfer(reg & 0x7F);
 		SPI.transfer(value);
-		#endif
 		digitalWrite(parameter.SPI_cs, HIGH);
 	}
 	#endif
 	#ifdef BME280_useI2C
-	else												//I2C (default)
+	else if (parameter.communication == 0)				//I2C (default)
 	{
-		#ifdef BME280_useI2C
 		Wire.beginTransmission(parameter.I2CAddress);
 		Wire.write(reg);
 		Wire.write(value);
 		Wire.endTransmission();
-		#endif
 	}
 	#endif
+	#ifdef BME280_useSWI2C
+	else if (parameter.communication == 3)				//Software I2C Communication
+	{
+		/*
+		//SoftWire implementation
+		swI2C.setSda(parameter.SPI_mosi);
+		swI2C.setScl(parameter.SPI_sck);
+		
+		swI2C.beginTransmission(parameter.I2CAddress);
+		swI2C.write(reg);
+		swI2C.write(value);
+		swI2C.endTransmission();
+		*/
+		//SWire implementation
+		SWire.begin(parameter.SPI_mosi, parameter.SPI_sck);
+		SWire.beginTransmission(parameter.I2CAddress);
+		SWire.write(reg);
+		SWire.write(value);
+		SWire.endTransmission();
+	}
+	#endif
+	else
+	{
+		return;										    //Communication Protocol not set
+	}
 }
 //##########################################################################
 uint8_t BlueDot_BME280::readByte(byte reg)
@@ -464,27 +518,52 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
-		#ifdef BME280_useHWSPI
 		SPI.transfer(reg | 0x80);		
 		value = SPI.transfer(0);
-		#endif
 		digitalWrite(parameter.SPI_cs, HIGH);		
 		return value;
 	}
 	#endif
 	#ifdef BME280_useI2C
-	else												//I2C (default)
+	else if (parameter.communication == 0)				//I2C (default)
 	{
-		#ifdef BME280_useI2C
 		Wire.beginTransmission(parameter.I2CAddress);
 		Wire.write(reg);
 		Wire.endTransmission();
 		Wire.requestFrom(parameter.I2CAddress,(uint8_t)1);		
 		value = Wire.read();
-		#endif	
 		return value;
 	}
 	#endif
+	#ifdef BME280_useSWI2C
+	else if (parameter.communication == 3)				//Software I2C Communication
+	{
+		/*
+		//SoftWire implementation
+		swI2C.setSda(parameter.SPI_mosi);
+		swI2C.setScl(parameter.SPI_sck);
+
+		swI2C.beginTransmission(parameter.I2CAddress);
+		swI2C.write(reg);
+		swI2C.endTransmission();
+		swI2C.requestFrom(parameter.I2CAddress,(uint8_t)1);  //.read reads from buffer
+		value = swI2C.read();
+		return value;
+		*/
+		//SWire implementation
+		SWire.begin(parameter.SPI_mosi, parameter.SPI_sck);
+		SWire.beginTransmission(parameter.I2CAddress);
+		SWire.write(reg);
+		SWire.endTransmission();
+		SWire.requestFrom(parameter.I2CAddress,(uint8_t)1);  //.read reads from buffer
+		value = SWire.read();
+		return value;
+	}
+	#endif
+	else
+	{
+		return 0;										//Communication Protocol not set
+	}
 }
 
 //##########################################################################
@@ -494,7 +573,7 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 	if (parameter.communication == 1)					//Software SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
-		spiTransfer(BME280_PRESSURE_MSB | 0x80);		
+		spiTransfer(BME280_PRESSURE_MSB);		
 
 		row_P = (uint32_t)spiTransfer(0)  << 12;
 		row_P |= (uint32_t)spiTransfer(0)  << 4;
@@ -510,9 +589,7 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 	else if (parameter.communication == 2)				//Hardware SPI
 	{
 		digitalWrite(parameter.SPI_cs, LOW);
-		#ifdef BME280_useHWSPI
-		SPI.transfer(BME280_PRESSURE_MSB | 0x80);		
-		
+		SPI.transfer(BME280_PRESSURE_MSB);		
 		row_P = (uint32_t)SPI.transfer(0)  << 12;
 		row_P |= (uint32_t)SPI.transfer(0)  << 4;
 		row_P |= (SPI.transfer(0)  >> 4 )& 0b00001111;
@@ -521,14 +598,12 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 		row_T |= (SPI.transfer(0) >> 4 )& 0b00001111;
 		row_H = (uint32_t)SPI.transfer(0) << 8;
 		row_H |= (uint32_t)SPI.transfer(0);
-		#endif
 		digitalWrite(parameter.SPI_cs, HIGH);		
 	}
 	#endif
 	#ifdef BME280_useI2C
-	else												//I2C (default)
+	else if (parameter.communication == 0)				//I2C (default)
 	{
-		#ifdef BME280_useI2C
 		Wire.beginTransmission(parameter.I2CAddress);
 		Wire.write(BME280_PRESSURE_MSB);
 		Wire.endTransmission();
@@ -542,9 +617,51 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 		row_T |= (Wire.read() >> 4 )& 0b00001111;
 		row_H = (uint32_t)Wire.read() << 8;
 		row_H |= (uint32_t)Wire.read();
-		#endif	
 	}
 	#endif
+	#ifdef BME280_useSWI2C
+	else if (parameter.communication == 3)				//Software I2C Communication
+	{
+		/*
+		//SoftWire implementation
+		swI2C.setSda(parameter.SPI_mosi);
+		swI2C.setScl(parameter.SPI_sck);
+
+		swI2C.beginTransmission(parameter.I2CAddress);
+		swI2C.write(BME280_PRESSURE_MSB);
+		swI2C.endTransmission();
+		swI2C.requestFrom(parameter.I2CAddress,(uint8_t)8);	//.read reads from buffer
+
+		row_P = (uint32_t)swI2C.read()  << 12;
+		row_P |= (uint32_t)swI2C.read()  << 4;
+		row_P |= (swI2C.read()  >> 4 )& 0b00001111;
+		row_T = (uint32_t)swI2C.read() << 12;
+		row_T |= (uint32_t)swI2C.read() << 4;
+		row_T |= (swI2C.read() >> 4 )& 0b00001111;
+		row_H = (uint32_t)swI2C.read() << 8;
+		row_H |= (uint32_t)swI2C.read();
+		*/
+		//SWire implementation
+		SWire.begin(parameter.SPI_mosi, parameter.SPI_sck);
+		SWire.beginTransmission(parameter.I2CAddress);
+		SWire.write(BME280_PRESSURE_MSB);
+		SWire.endTransmission();
+		SWire.requestFrom(parameter.I2CAddress,(uint8_t)8);	//.read reads from buffer
+
+		row_P = (uint32_t)SWire.read()  << 12;
+		row_P |= (uint32_t)SWire.read()  << 4;
+		row_P |= (SWire.read()  >> 4 )& 0b00001111;
+		row_T = (uint32_t)SWire.read() << 12;
+		row_T |= (uint32_t)SWire.read() << 4;
+		row_T |= (SWire.read() >> 4 )& 0b00001111;
+		row_H = (uint32_t)SWire.read() << 8;
+		row_H |= (uint32_t)SWire.read();
+	}
+	#endif
+	else
+	{
+		return;										  //Communication Protocol not set
+	}
 
 	//calc temp first since it is needed for presure and huminity
 	// null-pointer check 
@@ -572,11 +689,11 @@ uint8_t BlueDot_BME280::spiTransfer(uint8_t data)		//Software SPI done through b
 			digitalWrite(parameter.SPI_mosi, data & (1<<counter));
 		else
 			pinMode(parameter.SPI_miso, INPUT);			//set to MISO
-		delayMicroseconds(SW_SPI_delay_us);
+		delayMicroseconds(SW_Communication_delay_us);
 		digitalWrite(parameter.SPI_sck, HIGH);
 		if (digitalRead(parameter.SPI_miso))
 			reply |= 1;
-		delayMicroseconds(SW_SPI_delay_us);
+		delayMicroseconds(SW_Communication_delay_us);
 	}
 	if (parameter.spi3)									//set to MOSI
 		pinMode(parameter.SPI_mosi, OUTPUT);
