@@ -554,9 +554,12 @@ uint8_t BlueDot_BME280::readByte(byte reg)
 		SWire.begin(parameter.SPI_mosi, parameter.SPI_sck);
 		SWire.beginTransmission(parameter.I2CAddress);
 		SWire.write(reg);
-		SWire.endTransmission();
-		SWire.requestFrom(parameter.I2CAddress,(uint8_t)1);  //.read reads from buffer
-		value = SWire.read();
+		if (!SWire.endTransmission()) { // returns 0 in cas of acknowledge
+			SWire.requestFrom(parameter.I2CAddress,(uint8_t)1);  //.read reads from buffer
+			value = SWire.read();
+		} else {
+			value = 0; // no acknowledge
+		}
 		return value;
 	}
 	#endif
@@ -620,8 +623,7 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 	}
 	#endif
 	#ifdef BME280_useSWI2C
-	else if (parameter.communication == 3)				//Software I2C Communication
-	{
+	else if (parameter.communication == 3) {				//Software I2C Communication
 		/*
 		//SoftWire implementation
 		swI2C.setSda(parameter.SPI_mosi);
@@ -645,21 +647,24 @@ void BlueDot_BME280::readMeasurement(float *valueP, float *valueT, float *valueH
 		SWire.begin(parameter.SPI_mosi, parameter.SPI_sck);
 		SWire.beginTransmission(parameter.I2CAddress);
 		SWire.write(BME280_PRESSURE_MSB);
-		SWire.endTransmission();
-		SWire.requestFrom(parameter.I2CAddress,(uint8_t)8);	//.read reads from buffer
+		if (!SWire.endTransmission()) { // returns 0 in cas of acknowledge
+			SWire.requestFrom(parameter.I2CAddress,(uint8_t)8);	//.read reads from buffer
 
-		row_P = (uint32_t)SWire.read()  << 12;
-		row_P |= (uint32_t)SWire.read()  << 4;
-		row_P |= (SWire.read()  >> 4 )& 0b00001111;
-		row_T = (uint32_t)SWire.read() << 12;
-		row_T |= (uint32_t)SWire.read() << 4;
-		row_T |= (SWire.read() >> 4 )& 0b00001111;
-		row_H = (uint32_t)SWire.read() << 8;
-		row_H |= (uint32_t)SWire.read();
+			row_P = (uint32_t)SWire.read()  << 12;
+			row_P |= (uint32_t)SWire.read()  << 4;
+			row_P |= (SWire.read()  >> 4 )& 0b00001111;
+			row_T = (uint32_t)SWire.read() << 12;
+			row_T |= (uint32_t)SWire.read() << 4;
+			row_T |= (SWire.read() >> 4 )& 0b00001111;
+			row_H = (uint32_t)SWire.read() << 8;
+			row_H |= (uint32_t)SWire.read();
+		} else {
+			// no read since no acknowledge
+			return;
+		}
 	}
 	#endif
-	else
-	{
+	else {
 		return;										  //Communication Protocol not set
 	}
 
